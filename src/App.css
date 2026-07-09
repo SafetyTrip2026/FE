@@ -1,0 +1,281 @@
+.app-shell {
+  min-height: 100vh;
+  background:
+    linear-gradient(180deg, rgba(248, 250, 252, 0.95), rgba(239, 246, 255, 0.7)),
+    #f8fafc;
+  color: #0f172a;
+}
+
+.topbar {
+  align-items: center;
+  border-bottom: 1px solid #dbe4ee;
+  display: flex;
+  justify-content: space-between;
+  padding: 18px 32px;
+}
+
+.brand,
+.status,
+.panel-heading,
+.answer-heading,
+button {
+  align-items: center;
+  display: inline-flex;
+  gap: 10px;
+}
+
+.brand {
+  color: #0f766e;
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.brand svg,
+.panel-heading svg,
+.answer-heading svg {
+  height: 22px;
+  width: 22px;
+}
+
+.status {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 999px;
+  color: #9a3412;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 8px 12px;
+}
+
+.status.done {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+  color: #047857;
+}
+
+.workspace {
+  display: grid;
+  gap: 24px;
+  grid-template-columns: minmax(320px, 0.82fr) minmax(420px, 1.18fr);
+  margin: 0 auto;
+  max-width: 1180px;
+  padding: 34px 24px 20px;
+}
+
+.query-panel,
+.result-panel {
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid #dbe4ee;
+  border-radius: 8px;
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
+  padding: 24px;
+}
+
+.panel-heading {
+  color: #0f766e;
+  margin-bottom: 20px;
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+h1 {
+  color: #0f172a;
+  font-size: 32px;
+  line-height: 1.15;
+}
+
+h2 {
+  color: #0f172a;
+  font-size: 20px;
+}
+
+label {
+  color: #475569;
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+textarea {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  box-sizing: border-box;
+  color: #0f172a;
+  font: inherit;
+  line-height: 1.5;
+  min-height: 132px;
+  padding: 14px;
+  resize: vertical;
+  width: 100%;
+}
+
+textarea:focus {
+  border-color: #0f766e;
+  outline: 3px solid rgba(15, 118, 110, 0.18);
+}
+
+button {
+  background: #0f766e;
+  border: 0;
+  border-radius: 8px;
+  color: #ffffff;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+  justify-content: center;
+  margin-top: 14px;
+  min-height: 46px;
+  padding: 0 18px;
+  width: 100%;
+}
+
+button:disabled {
+  background: #94a3b8;
+  cursor: wait;
+}
+
+button svg {
+  height: 18px;
+  width: 18px;
+}
+
+.parsed-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, 1fr);
+  margin-top: 18px;
+}
+
+.parsed-grid div,
+.risk-summary,
+.answer-box {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.parsed-grid div {
+  min-height: 72px;
+  padding: 12px;
+}
+
+.parsed-grid span,
+.risk-summary span {
+  color: #64748b;
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.parsed-grid strong,
+.risk-summary strong {
+  color: #0f172a;
+  display: block;
+  font-size: 17px;
+  line-height: 1.25;
+}
+
+.risk-summary {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  padding: 16px;
+}
+
+.risk-summary svg {
+  color: #dc2626;
+  height: 32px;
+  width: 32px;
+}
+
+.chart-box {
+  height: 260px;
+}
+
+.answer-box {
+  margin-top: 14px;
+  padding: 18px;
+}
+
+.answer-heading {
+  color: #2563eb;
+  margin-bottom: 10px;
+}
+
+.answer-box p {
+  color: #334155;
+  line-height: 1.75;
+  min-height: 84px;
+}
+
+.citation-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.citation-list span {
+  background: #eef2ff;
+  border: 1px solid #c7d2fe;
+  border-radius: 999px;
+  color: #3730a3;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 7px 10px;
+}
+
+.event-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 auto;
+  max-width: 1180px;
+  padding: 0 24px 32px;
+}
+
+.event-strip span {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  color: #475569;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 12px;
+  padding: 6px 8px;
+}
+
+@media (max-width: 880px) {
+  .topbar {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
+    padding: 16px 18px;
+  }
+
+  .workspace {
+    grid-template-columns: 1fr;
+    padding: 20px 14px;
+  }
+
+  .query-panel,
+  .result-panel {
+    padding: 18px;
+  }
+
+  h1 {
+    font-size: 26px;
+  }
+
+  .parsed-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
