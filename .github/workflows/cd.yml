@@ -8,6 +8,7 @@ on:
       - main
     types:
       - completed
+
   workflow_dispatch:
     inputs:
       rollback:
@@ -70,6 +71,8 @@ jobs:
           tags: |
             ${{ steps.image.outputs.image_tag }}
             ${{ steps.image.outputs.latest_tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
   deploy:
     name: Deploy to GCE
@@ -134,7 +137,11 @@ jobs:
 
           docker stop "$CONTAINER_NAME" || true
           docker rm "$CONTAINER_NAME" || true
-          docker run -d --name "$CONTAINER_NAME" --restart unless-stopped -p "${PUBLIC_PORT}:80" "$IMAGE_TAG"
+          docker run -d \
+            --name "$CONTAINER_NAME" \
+            --restart unless-stopped \
+            -p "${PUBLIC_PORT}:80" \
+            "$IMAGE_TAG"
 
           for i in $(seq 1 12); do
             HTTP_STATUS=$(curl -sL -o /dev/null -w "%{http_code}" "http://localhost:${PUBLIC_PORT}${HEALTH_PATH}" || echo "000")
@@ -155,7 +162,11 @@ jobs:
             docker pull "$PREVIOUS_IMAGE"
             docker stop "$CONTAINER_NAME" || true
             docker rm "$CONTAINER_NAME" || true
-            docker run -d --name "$CONTAINER_NAME" --restart unless-stopped -p "${PUBLIC_PORT}:80" "$PREVIOUS_IMAGE"
+            docker run -d \
+              --name "$CONTAINER_NAME" \
+              --restart unless-stopped \
+              -p "${PUBLIC_PORT}:80" \
+              "$PREVIOUS_IMAGE"
           fi
 
           exit 1
@@ -184,9 +195,15 @@ jobs:
 
           PREVIOUS_IMAGE=$(cat .previous_image)
           docker pull "$PREVIOUS_IMAGE"
+
           docker stop "$CONTAINER_NAME" || true
           docker rm "$CONTAINER_NAME" || true
-          docker run -d --name "$CONTAINER_NAME" --restart unless-stopped -p "${PUBLIC_PORT}:80" "$PREVIOUS_IMAGE"
+          docker run -d \
+            --name "$CONTAINER_NAME" \
+            --restart unless-stopped \
+            -p "${PUBLIC_PORT}:80" \
+            "$PREVIOUS_IMAGE"
+
           echo "$PREVIOUS_IMAGE" > .current_image
 
           for i in $(seq 1 12); do
@@ -222,6 +239,7 @@ jobs:
           echo "| Commit | \`${{ github.sha }}\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Branch | \`${{ github.ref_name }}\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Actor | ${{ github.actor }} |" >> "$GITHUB_STEP_SUMMARY"
+
           if [ "${{ inputs.rollback }}" = "true" ]; then
             echo "" >> "$GITHUB_STEP_SUMMARY"
             echo "> Rollback mode was requested." >> "$GITHUB_STEP_SUMMARY"
