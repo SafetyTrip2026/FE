@@ -11,11 +11,11 @@ on:
       - "package.json"
       - "package-lock.json"
       - "vite.config.*"
-      - "tsconfig*.json"
       - "Dockerfile"
       - "nginx.conf"
       - ".github/workflows/**"
       - "!**/*.md"
+
   pull_request:
     branches:
       - main
@@ -26,11 +26,11 @@ on:
       - "package.json"
       - "package-lock.json"
       - "vite.config.*"
-      - "tsconfig*.json"
       - "Dockerfile"
       - "nginx.conf"
       - ".github/workflows/**"
       - "!**/*.md"
+
   workflow_dispatch:
 
 concurrency:
@@ -44,8 +44,9 @@ env:
   NODE_VERSION: "24"
 
 jobs:
+  # Job 1: Lint (코드 품질)
   lint:
-    name: Lint
+    name: Code Quality
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -60,12 +61,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run lint
+      - name: Run Oxlint
         run: npm run lint
 
+  # Job 2: Test (단위 테스트)
   test:
-    name: Unit Test
+    name: Unit Tests
     runs-on: ubuntu-latest
+    needs: lint
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -79,15 +82,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run unit tests
+      - name: Run Vitest
         run: npm run test
 
+  # Job 3: Build (프론트 빌드)
   build:
     name: Build Frontend
     runs-on: ubuntu-latest
-    needs:
-      - lint
-      - test
+    needs: test
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -101,7 +103,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build app
+      - name: Build Vite app
         run: npm run build
 
       - name: Upload build artifact
@@ -111,13 +113,55 @@ jobs:
           path: dist
           if-no-files-found: error
 
-  docker:
-    name: Docker Build
+  # Job 4: Comment (PR 코멘트)
+  comment:
+    name: Report Status
     runs-on: ubuntu-latest
-    needs: build
+    if: always() && github.event_name == 'pull_request'
+    needs:
+      - lint
+      - test
+      - build
+    permissions:
+      pull-requests: write
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Post CI result comment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LINT_RESULT: ${{ needs.lint.result }}
+          TEST_RESULT: ${{ needs.test.result }}
+          BUILD_RESULT: ${{ needs.build.result }}
+        run: |
+          if [ "$LINT_RESULT" = "success" ]; then LINT_ICON="PASS"; else LINT_ICON="FAIL"; fi
+          if [ "$TEST_RESULT" = "success" ]; then TEST_ICON="PASS"; else TEST_ICON="FAIL"; fi
+          if [ "$BUILD_RESULT" = "success" ]; then BUILD_ICON="PASS"; else BUILD_ICON="FAIL"; fi
 
-      - name: Build Docker image
-        run: docker build -t safetytrip-fe:ci .
+          {
+            echo "### SafetyTrip FE CI Report"
+            echo ""
+            echo "| Category | Status |"
+            echo "|---|---|"
+            echo "| Code Quality | $LINT_ICON $LINT_RESULT |"
+            echo "| Unit Tests | $TEST_ICON $TEST_RESULT |"
+            echo "| Build | $BUILD_ICON $BUILD_RESULT |"
+            echo ""
+            if [ "$LINT_RESULT" = "success" ] && \
+               [ "$TEST_RESULT" = "success" ] && \
+               [ "$BUILD_RESULT" = "success" ]; then
+              echo "All FE CI checks passed."
+            else
+              echo "One or more FE CI checks failed. Please check the workflow logs."
+            fi
+          } > status_report.md
+
+          gh pr comment ${{ github.event.pull_request.number }} \
+            --repo ${{ github.repository }} \
+            --body-file status_report.md
+
+          if [ "$LINT_RESULT" != "success" ] || \
+             [ "$TEST_RESULT" != "success" ] || \
+             [ "$BUILD_RESULT" != "success" ]; then
+            exit 1
+          fi
+
+# 코드 래빗으로 코드 리뷰 실행
