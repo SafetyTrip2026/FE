@@ -47,7 +47,7 @@ http://localhost:5173
 ## 백엔드 API 계약
 
 이 프론트는 최종적으로 백엔드의 스트리밍 API와 연결될 예정입니다.
-백엔드 연동 전까지는 `src/app/App.tsx` 안의 mock 데이터를 사용합니다.
+백엔드 연동 전까지는 `src/mocks/safetyTripMock.ts` 안의 mock 데이터를 사용합니다.
 
 ## Mock 시나리오
 
@@ -91,10 +91,8 @@ SafetyTrip2026-FE/
     main.tsx
     app/
       App.tsx
-      components/
-        figma/
-          ImageWithFallback.tsx
-        ui/
+    mocks/
+      safetyTripMock.ts
     styles/
       fonts.css
       globals.css
