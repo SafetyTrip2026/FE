@@ -10,7 +10,7 @@ import {
 } from "./safetyTripMock";
 
 describe("safetyTripMock", () => {
-  it("provides one complete mock answer scenario", () => {
+  it("keeps the travel safety mock scenario complete", () => {
     expect(DEFAULT_QUESTION.length).toBeGreaterThan(0);
     expect(FULL_ANSWER).toContain("119");
     expect(TRACE_EVENTS.at(-1)).toEqual({
