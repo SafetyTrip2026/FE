@@ -32,7 +32,7 @@ import type {
   StatsStreamData,
 } from "../types/chat";
 
-const DEFAULT_QUESTION = "7월 강릉에 아기 데리고 놀러가는데 위험한거 알려줘";
+const DEFAULT_QUESTION = "";
 
 const riskStyles: Record<string, { color: string; icon: typeof AlertTriangle }> = {
   강풍: { color: "#0f7a6e", icon: Wind },
@@ -132,7 +132,7 @@ export default function App() {
     : "질문 기반 안전 분석";
 
   const handleRun = async () => {
-    if (streaming) return;
+    if (streaming || question.trim().length === 0) return;
 
     setRan(false);
     setDisplayedAnswer("");
@@ -270,7 +270,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={handleRun}
-                disabled={streaming}
+                disabled={streaming || question.trim().length === 0}
                 className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-[#1d6fb8] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#155d9c] disabled:cursor-wait disabled:bg-slate-400"
               >
                 <Play size={16} />
