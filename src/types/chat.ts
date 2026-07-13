@@ -1,25 +1,19 @@
 export type StreamEventType =
-  | "thinking"
+  | "session"
   | "parsed"
   | "stats"
   | "citation"
-  | "reask"
-  | "escalate"
-  | "degraded"
   | "token"
-  | "response"
+  | "escalate"
+  | "reask"
+  | "error"
+  | "degraded"
   | "done"
-  | "error";
+  | "thinking";
 
 export interface ChatStreamRequest {
   message: string;
   threadId?: string;
-}
-
-export interface ChatStreamResponse {
-  answer: string;
-  citations: readonly string[];
-  toolUsed?: string;
 }
 
 export interface ParsedStreamData {
@@ -48,19 +42,52 @@ export interface CitationStreamData {
   ids: string[];
 }
 
+export interface ContactData {
+  agency?: string;
+  phone?: string;
+}
+
+export interface SessionStreamData {
+  thread_id?: string;
+}
+
 export interface EscalateStreamData {
   reason?: string;
   message?: string;
-  contact?: {
-    agency?: string;
-    phone?: string;
-  };
+  contact?: ContactData;
 }
+
+export interface ReaskStreamData {
+  message?: string;
+}
+
+export interface ErrorStreamData {
+  message?: string;
+  detail?: string;
+  contact?: ContactData;
+}
+
+export interface DegradedStreamData {
+  reason?: string;
+  message?: string;
+  contact?: ContactData;
+}
+
+export type StreamEventData =
+  | SessionStreamData
+  | ParsedStreamData
+  | StatsStreamData
+  | CitationStreamData
+  | EscalateStreamData
+  | ReaskStreamData
+  | ErrorStreamData
+  | DegradedStreamData
+  | Record<string, unknown>;
 
 export interface StreamEvent {
   type: StreamEventType;
   content?: string;
   status?: string;
-  data?: ChatStreamResponse | ParsedStreamData | StatsStreamData | CitationStreamData | EscalateStreamData;
+  data?: StreamEventData;
   toolUsed?: string;
 }

@@ -9,6 +9,7 @@ import {
   CloudRain,
   MapPin,
   Play,
+  RotateCcw,
   Shield,
   Thermometer,
   Users,
@@ -27,8 +28,12 @@ import {
 import { streamChatResponse } from "../services/chatStreamService";
 import type {
   CitationStreamData,
+  ErrorStreamData,
+  EscalateStreamData,
   ParsedStreamData,
+  ReaskStreamData,
   RiskScore,
+  SessionStreamData,
   StatsStreamData,
 } from "../types/chat";
 
@@ -42,6 +47,15 @@ const riskStyles: Record<string, { color: string; icon: typeof AlertTriangle }> 
 };
 
 const fallbackRisk = { color: "#64748b", icon: AlertTriangle };
+
+type NoticeKind = "info" | "warning" | "error";
+type StreamOutcome = "idle" | "stats" | "answer-only" | "no-stats" | "error";
+
+interface NoticeState {
+  kind: NoticeKind;
+  title: string;
+  message: string;
+}
 
 function getRiskStyle(disasterType: string) {
   return riskStyles[disasterType] ?? fallbackRisk;
@@ -60,16 +74,36 @@ function RiskTooltip({ active, payload }: any) {
   );
 }
 
-function isParsedData(data: unknown): data is ParsedStreamData {
+function isObject(data: unknown): data is Record<string, unknown> {
   return typeof data === "object" && data !== null;
 }
 
+function isParsedData(data: unknown): data is ParsedStreamData {
+  return isObject(data);
+}
+
+function isSessionData(data: unknown): data is SessionStreamData {
+  return isObject(data);
+}
+
 function isStatsData(data: unknown): data is StatsStreamData {
-  return typeof data === "object" && data !== null && "risk_scores" in data;
+  return isObject(data) && "risk_scores" in data;
 }
 
 function isCitationData(data: unknown): data is CitationStreamData {
-  return typeof data === "object" && data !== null && "ids" in data;
+  return isObject(data) && Array.isArray(data.ids);
+}
+
+function isReaskData(data: unknown): data is ReaskStreamData {
+  return isObject(data);
+}
+
+function isEscalateData(data: unknown): data is EscalateStreamData {
+  return isObject(data);
+}
+
+function isErrorData(data: unknown): data is ErrorStreamData {
+  return isObject(data);
 }
 
 function renderAnswer(text: string) {
@@ -96,14 +130,31 @@ function renderAnswer(text: string) {
   );
 }
 
+function noticeClassName(kind: NoticeKind) {
+  const base = "mb-3 rounded-lg border px-3 py-2 text-xs leading-relaxed";
+
+  if (kind === "error") {
+    return `${base} border-red-200 bg-red-50 text-red-800`;
+  }
+
+  if (kind === "warning") {
+    return `${base} border-amber-200 bg-amber-50 text-amber-800`;
+  }
+
+  return `${base} border-sky-200 bg-sky-50 text-sky-800`;
+}
+
 export default function App() {
   const [question, setQuestion] = useState(DEFAULT_QUESTION);
   const [ran, setRan] = useState(false);
   const [streaming, setStreaming] = useState(false);
   const [displayedAnswer, setDisplayedAnswer] = useState("");
+  const [notice, setNotice] = useState<NoticeState | null>(null);
   const [parsed, setParsed] = useState<ParsedStreamData | null>(null);
   const [riskScores, setRiskScores] = useState<RiskScore[]>([]);
   const [statsReceived, setStatsReceived] = useState(false);
+  const [streamOutcome, setStreamOutcome] = useState<StreamOutcome>("idle");
+  const [threadId, setThreadId] = useState<string | null>(null);
   const [topRisk, setTopRisk] = useState<string | null>(null);
   const [citations, setCitations] = useState<string[]>([]);
   const [traceEvents, setTraceEvents] = useState<{ label: string; value: string }[]>([]);
@@ -131,99 +182,212 @@ export default function App() {
     ? `${parsed?.region}${hasParsedMonth ? ` ${parsed?.month}` : ""} 안전 분석`
     : "질문 기반 안전 분석";
 
+  const riskEmptyMessage = (() => {
+    if (statsReceived) return "해당 조건의 위험 통계가 없습니다.";
+    if (streamOutcome === "answer-only") return "이 답변에는 별도 위험도 통계가 없습니다.";
+    if (streamOutcome === "no-stats") return "표시할 위험 통계가 없습니다.";
+    if (streamOutcome === "error") return "통계를 불러오지 못했습니다.";
+    if (ran) return "통계 이벤트를 기다리는 중입니다.";
+    return "실행 후 통계가 표시됩니다.";
+  })();
+
   const handleRun = async () => {
     if (streaming || question.trim().length === 0) return;
 
     setRan(false);
     setDisplayedAnswer("");
+    setNotice(null);
     setParsed(null);
     setRiskScores([]);
     setStatsReceived(false);
+    setStreamOutcome("idle");
     setTopRisk(null);
     setCitations([]);
     setTraceEvents([]);
     setStreaming(true);
 
     let hasToken = false;
+    let sawTerminalEvent = false;
 
-    for await (const event of streamChatResponse({ message: question })) {
-      if (event.type === "parsed" && isParsedData(event.data)) {
-        setRan(true);
-        setParsed(event.data);
-        setTraceEvents((current) => [
-          ...current,
-          { label: "parsed", value: `${event.data.region ?? "-"} · ${event.data.month ?? "-"}` },
-        ]);
-      }
+    try {
+      for await (const event of streamChatResponse({ message: question, threadId: threadId ?? undefined })) {
+        if (event.type === "session" && isSessionData(event.data)) {
+          if (event.data.thread_id) {
+            setThreadId(event.data.thread_id);
+          }
+          setTraceEvents((current) => [
+            ...current,
+            { label: "session", value: event.data.thread_id ? "대화 맥락 연결" : "세션 시작" },
+          ]);
+          continue;
+        }
 
-      if (event.type === "stats" && isStatsData(event.data)) {
-        const nextRiskScores = event.data.risk_scores ?? [];
-        const totalCount = event.data.total_count ?? 0;
-        const isInsufficient = totalCount === 0 || nextRiskScores.length === 0 || event.data.scope_used === "insufficient";
+        if (event.type === "parsed" && isParsedData(event.data)) {
+          setRan(true);
+          setParsed(event.data);
+          setTraceEvents((current) => [
+            ...current,
+            { label: "parsed", value: `${event.data.region ?? "-"} · ${event.data.month ?? "-"}` },
+          ]);
+          continue;
+        }
 
-        setRan(true);
-        setStatsReceived(true);
-        setRiskScores(nextRiskScores);
-        setTopRisk(event.data.top_risk ?? null);
-        setTraceEvents((current) => [
-          ...current,
-          {
-            label: "stats",
-            value: `총 ${event.data.total_count ?? 0}건 · ${event.data.scope_used ?? "-"}`,
-          },
-        ]);
+        if (event.type === "stats" && isStatsData(event.data)) {
+          const nextRiskScores = event.data.risk_scores ?? [];
 
-        if (isInsufficient) {
-          setDisplayedAnswer(
-            event.data.fallback_notice ??
-              "해당 지역·시기의 재난문자 발령 이력이 충분하지 않습니다.\n\n공식 데이터 기준으로 위험 통계를 산출하기 어려워요. 안전 확인이 필요하면 기상청, 국민재난안전포털 또는 관할 지자체 재난안전상황실 안내를 확인해주세요.",
-          );
+          setRan(true);
+          setStatsReceived(true);
+          setStreamOutcome("stats");
+          setRiskScores(nextRiskScores);
+          setTopRisk(event.data.top_risk ?? null);
+          setTraceEvents((current) => [
+            ...current,
+            {
+              label: "stats",
+              value: `총 ${event.data.total_count ?? 0}건 · ${event.data.scope_used ?? "-"}`,
+            },
+          ]);
+
+          if (event.data.fallback_notice) {
+            setNotice({
+              kind: "info",
+              title: "통계 범위 안내",
+              message: event.data.fallback_notice,
+            });
+          }
+          continue;
+        }
+
+        if (event.type === "citation" && isCitationData(event.data)) {
+          setCitations(event.data.ids);
+          setStreamOutcome((current) => (current === "idle" ? "answer-only" : current));
+          setTraceEvents((current) => [
+            ...current,
+            { label: "citation", value: `${event.data.ids.length}개 출처` },
+          ]);
+          continue;
+        }
+
+        if (event.type === "token") {
+          setRan(true);
+          setStreamOutcome((current) => (current === "idle" ? "answer-only" : current));
+          setDisplayedAnswer((current) => {
+            if (hasToken) return current + (event.content ?? "");
+            hasToken = true;
+            return event.content ?? "";
+          });
+          continue;
+        }
+
+        if (event.type === "reask") {
+          const message =
+            event.content ??
+            (isReaskData(event.data) ? event.data.message : undefined) ??
+            "지역과 시기를 조금 더 구체적으로 입력해 주세요.";
+
+          setRan(true);
+          setDisplayedAnswer(message);
+          setNotice({
+            kind: "info",
+            title: "추가 정보가 필요합니다",
+            message: "지역과 시기를 포함해 다시 질문해 주세요.",
+          });
+          setTraceEvents((current) => [...current, { label: "reask", value: "추가 정보 요청" }]);
+          setStreamOutcome("no-stats");
+          sawTerminalEvent = true;
+          continue;
+        }
+
+        if (event.type === "escalate") {
+          const fallback = "공식 매뉴얼에서 충분한 근거를 찾지 못했습니다.";
+          const message = event.content ?? fallback;
+
+          setRan(true);
+          setDisplayedAnswer(message);
+          setNotice({
+            kind: "warning",
+            title: "관련 기관 안내",
+            message: "공식 행동요령 근거가 부족해 안전한 기관 안내로 전환했습니다.",
+          });
+          setTraceEvents((current) => [
+            ...current,
+            {
+              label: "escalate",
+              value: isEscalateData(event.data) ? event.data.reason ?? "근거 부족" : "근거 부족",
+            },
+          ]);
+          setStreamOutcome("no-stats");
+          sawTerminalEvent = true;
+          continue;
+        }
+
+        if (event.type === "degraded") {
+          setRan(true);
+          setNotice({
+            kind: "warning",
+            title: "일부 기능 장애",
+            message: "AI 답변 생성 중 일부 문제가 있어 공식 원문 안내로 전환했습니다.",
+          });
+          setTraceEvents((current) => [...current, { label: "degraded", value: "강등 응답" }]);
+          continue;
+        }
+
+        if (event.type === "error") {
+          const message =
+            event.content ??
+            (isErrorData(event.data) ? event.data.message ?? event.data.detail : undefined) ??
+            "일시적으로 AI 서비스에 연결할 수 없습니다.";
+
+          setRan(true);
+          setDisplayedAnswer(message);
+          setNotice({
+            kind: "error",
+            title: "요청 처리 실패",
+            message: "일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.",
+          });
+          setTraceEvents((current) => [...current, { label: "error", value: "서비스 오류" }]);
+          setStreamOutcome("error");
+          sawTerminalEvent = true;
+          continue;
+        }
+
+        if (event.type === "done") {
+          setStreaming(false);
+          setTraceEvents((current) => [...current, { label: "done", value: "stream completed" }]);
         }
       }
-
-      if (event.type === "citation" && isCitationData(event.data)) {
-        setCitations(event.data.ids);
-        setTraceEvents((current) => [
-          ...current,
-          { label: "citation", value: `${event.data.ids.length}개 출처` },
-        ]);
-      }
-
-      if (event.type === "token") {
-        setRan(true);
-        if (hasToken) {
-          setDisplayedAnswer((current) => current + (event.content ?? ""));
-        } else {
-          setDisplayedAnswer(event.content ?? "");
-          hasToken = true;
-        }
-      }
-
-      if (event.type === "reask") {
-        setRan(true);
-        setDisplayedAnswer(event.content ?? "지역과 시기를 조금 더 구체적으로 입력해주세요.");
-        setTraceEvents((current) => [...current, { label: "reask", value: "추가 정보 요청" }]);
-      }
-
-      if (event.type === "escalate" || event.type === "degraded") {
-        setRan(true);
-        setDisplayedAnswer(event.content ?? "공식 근거가 부족해 관련 기관 안내로 전환합니다.");
-        setTraceEvents((current) => [
-          ...current,
-          { label: event.type, value: event.status ?? "관련 기관 안내" },
-        ]);
-      }
-
-      if (event.type === "error") {
-        setRan(true);
-        setDisplayedAnswer(event.content ?? "스트리밍 중 오류가 발생했습니다.");
-      }
-
-      if (event.type === "done") {
+    } catch {
+      setRan(true);
+      setStreaming(false);
+      setDisplayedAnswer("스트리밍 응답을 처리하는 중 오류가 발생했습니다.");
+      setNotice({
+        kind: "error",
+        title: "스트리밍 오류",
+        message: "네트워크 연결 또는 백엔드 응답 형식을 확인해 주세요.",
+      });
+      setStreamOutcome("error");
+    } finally {
+      if (sawTerminalEvent) {
         setStreaming(false);
-        setTraceEvents((current) => [...current, { label: "done", value: "stream completed" }]);
       }
     }
+  };
+
+  const handleResetConversation = () => {
+    if (streaming) return;
+
+    setThreadId(null);
+    setQuestion("");
+    setRan(false);
+    setDisplayedAnswer("");
+    setNotice(null);
+    setParsed(null);
+    setRiskScores([]);
+    setStatsReceived(false);
+    setStreamOutcome("idle");
+    setTopRisk(null);
+    setCitations([]);
+    setTraceEvents([]);
   };
 
   return (
@@ -276,6 +440,18 @@ export default function App() {
                 <Play size={16} />
                 {streaming ? "분석 중" : "실행"}
               </button>
+              <div className="mt-3 flex items-center justify-between gap-3 text-xs text-[#5a7394]">
+                <span>{threadId ? "대화 맥락 유지 중" : "새 대화 세션"}</span>
+                <button
+                  type="button"
+                  onClick={handleResetConversation}
+                  disabled={streaming || (!threadId && !ran && question.length === 0)}
+                  className="flex items-center gap-1 rounded-md px-2 py-1 font-medium text-[#1d6fb8] transition hover:bg-sky-50 disabled:cursor-not-allowed disabled:text-slate-400"
+                >
+                  <RotateCcw size={13} />
+                  새 대화
+                </button>
+              </div>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
@@ -361,11 +537,7 @@ export default function App() {
                     </ResponsiveContainer>
                   ) : (
                     <div className="flex h-full items-center justify-center text-sm text-[#5a7394]">
-                      {statsReceived
-                        ? "해당 조건의 위험 통계가 없습니다."
-                        : ran
-                          ? "통계 이벤트를 기다리는 중입니다."
-                          : "실행 후 통계가 표시됩니다."}
+                      {riskEmptyMessage}
                     </div>
                   )}
                 </div>
@@ -391,6 +563,12 @@ export default function App() {
                   안전 리포트
                 </div>
                 <div className="h-[310px] overflow-y-auto overscroll-contain rounded-lg border border-white/60 bg-white/45 p-4 pr-3">
+                  {notice && (
+                    <div className={noticeClassName(notice.kind)}>
+                      <div className="mb-1 font-semibold">{notice.title}</div>
+                      <div>{notice.message}</div>
+                    </div>
+                  )}
                   {displayedAnswer ? (
                     renderAnswer(displayedAnswer)
                   ) : (
